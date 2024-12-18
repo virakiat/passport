@@ -1,6 +1,5 @@
 // ---- Testing libraries
 import request from "supertest";
-import * as DIDKit from "@spruceid/didkit-wasm-node";
 
 // ---- Test subject
 import { app } from "../src/index";
@@ -8,37 +7,33 @@ import { getEip712Issuer } from "../src/issuers";
 
 const issuer = getEip712Issuer();
 
+jest.mock("../src/utils/bans", () => ({
+  checkCredentialBans: jest.fn().mockImplementation((input) => Promise.resolve(input)),
+}));
+
 jest.mock("../src/utils/verifyDidChallenge", () => ({
   verifyDidChallenge: jest.fn().mockImplementation(() => true),
 }));
 
 jest.mock("ethers", () => {
   const originalModule = jest.requireActual("ethers") as any;
-  const ethers = originalModule.ethers;
-  const utils = originalModule.utils;
 
   return {
-    utils: {
-      ...utils,
-      getAddress: jest
-        .fn()
-        .mockImplementationOnce(() => {
-          return "0x1";
-        })
-        .mockImplementationOnce(() => {
-          return "0xAbC";
-        })
-        .mockImplementationOnce(() => {
-          return "0xAbC";
-        }),
-      verifyMessage: jest.fn().mockImplementation(() => {
-        return "string";
+    ...originalModule,
+    getAddress: jest
+      .fn()
+      .mockImplementationOnce(() => {
+        return "0x1";
+      })
+      .mockImplementationOnce(() => {
+        return "0xAbC";
+      })
+      .mockImplementationOnce(() => {
+        return "0xAbC";
       }),
-      splitSignature: jest.fn().mockImplementation(() => {
-        return { v: 0, r: "r", s: "s" };
-      }),
-    },
-    ethers,
+    verifyMessage: jest.fn().mockImplementation(() => {
+      return "string";
+    }),
   };
 });
 

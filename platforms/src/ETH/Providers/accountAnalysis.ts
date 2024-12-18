@@ -7,9 +7,9 @@ import { handleProviderAxiosError } from "../../utils/handleProviderAxiosError";
 export type ModelResponse = {
   data: {
     human_probability: number;
-    gas_spent: number;
-    n_days_active: number;
     n_transactions: number;
+    gas_spent?: number;
+    n_days_active?: number;
   };
 };
 
@@ -22,6 +22,11 @@ type ETHAnalysis = {
 
 export type ETHAnalysisContext = ProviderContext & {
   ethAnalysis?: ETHAnalysis;
+  aggregateAnalysis?: AggregateAnalysis;
+};
+
+export type AggregateAnalysis = {
+  humanProbability: number;
 };
 
 const dataScienceEndpoint = process.env.DATA_SCIENCE_API_URL;
@@ -40,12 +45,55 @@ export async function getETHAnalysis(address: string, context: ETHAnalysisContex
   return context.ethAnalysis;
 }
 
-export async function fetchModelData<T>(address: string, url_subpath: string): Promise<T> {
+const MODEL_SUBPATHS = {
+  eth: "eth-stamp-v2-predict",
+  zk: "zksync-model-v2-predict",
+  polygon: "polygon-model-predict",
+  arb: "arbitrum-model-predict",
+  op: "optimism-model-predict",
+} as const;
+
+type ModelKeys = keyof typeof MODEL_SUBPATHS;
+
+type AggregateData = {
+  [K in ModelKeys as `score_${K}`]: number;
+} & {
+  [K in ModelKeys as `txs_${K}`]: number;
+};
+
+export async function getAggregateAnalysis(address: string, context: ETHAnalysisContext): Promise<AggregateAnalysis> {
+  if (!context?.aggregateAnalysis) {
+    const results = await Promise.all(
+      Object.entries(MODEL_SUBPATHS).map(async ([modelAbbreviation, subpath]) => {
+        const { data } = await fetchModelData<ModelResponse>(address, subpath);
+        return {
+          [`score_${modelAbbreviation}`]: data.human_probability,
+          [`txs_${modelAbbreviation}`]: data.n_transactions,
+        };
+      })
+    );
+
+    const aggregateData: AggregateData = Object.assign({}, ...results);
+
+    const { data } = await fetchModelData<ModelResponse>(address, "aggregate-model-predict", aggregateData);
+
+    context.aggregateAnalysis = {
+      humanProbability: data.human_probability,
+    };
+  }
+  return context.aggregateAnalysis;
+}
+
+export async function fetchModelData<T>(address: string, url_subpath: string, data?: AggregateData): Promise<T> {
   try {
-    const response = await axios.post(`http://${dataScienceEndpoint}/${url_subpath}`, {
-      address,
-    });
-    return response.data as T;
+    const payload: { address: string; data?: AggregateData } = { address };
+    if (data) {
+      payload["data"] = data;
+    }
+    const url = `http://${dataScienceEndpoint}/${url_subpath}`;
+    const response = await axios.post<T>(url, payload);
+
+    return response.data;
   } catch (e) {
     handleProviderAxiosError(e, "model data (" + url_subpath + ")", [dataScienceEndpoint]);
   }
@@ -93,14 +141,40 @@ export class AccountAnalysis implements Provider {
   }
 }
 
-class HumanProbabilityProvider extends AccountAnalysis {
-  constructor(props: Omit<EthOptions, "dataKey" | "failureMessageFormatter">) {
-    super({
-      ...props,
-      dataKey: "humanProbability",
-      failureMessageFormatter: (minimum: number, actual: number) =>
-        `You received a score of ${actual} from our analysis. You must have a score of ${minimum} or higher to obtain this stamp.`,
-    });
+type HumanProbabilityOptions = {
+  type: PROVIDER_ID;
+  minimum: number;
+};
+
+class HumanProbabilityProvider implements Provider {
+  type: PROVIDER_ID;
+  minimum: number;
+
+  constructor(options: HumanProbabilityOptions) {
+    this.type = options.type;
+    this.minimum = options.minimum;
+  }
+
+  async verify(payload: RequestPayload, context: ETHAnalysisContext): Promise<VerifiedPayload> {
+    const { address } = payload;
+    const analysis = await getAggregateAnalysis(address, context);
+    const value = analysis.humanProbability;
+
+    if (value < this.minimum) {
+      return {
+        valid: false,
+        errors: [
+          `You received a score of ${value} from our analysis. You must have a score of ${this.minimum} or higher to obtain this stamp.`,
+        ],
+      };
+    }
+
+    return {
+      valid: true,
+      record: {
+        address,
+      },
+    };
   }
 }
 

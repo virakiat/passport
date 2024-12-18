@@ -417,10 +417,12 @@ export type PROVIDER_ID =
   | "Lens"
   | "GnosisSafe"
   | "CoinbaseDualVerification"
+  | "CoinbaseDualVerification2"
   | "GuildAdmin"
   | "GuildPassportMember"
   | "Hypercerts"
   | "HolonymGovIdProvider"
+  | "HolonymPhone"
   | "IdenaState#Newbie"
   | "IdenaState#Verified"
   | "IdenaState#Human"
@@ -447,6 +449,7 @@ export type PROVIDER_ID =
   | "AllowList"
   | `AllowList#${string}`
   | "BinanceBABT"
+  | "BinanceBABT2"
   | `DeveloperList#${string}#${string}`;
 
 export type StampBit = {

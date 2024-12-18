@@ -23,7 +23,8 @@ const mockResponse = ({
   gasSpent?: number;
   numberDaysActive?: number;
   numberTransactions?: number;
-}): { data: ModelResponse } => ({
+}): { status:number, data: ModelResponse } => ({
+  status: 200,
   data: {
     data: {
       human_probability: score || 0,
@@ -65,7 +66,8 @@ describe("AccountAnalysis Providers", () => {
   describe("should check human_probability", () => {
     it.each(scoreTestCases)("for score %i should return %s for %p", async (score, expected, provider) => {
       const mockedResponse = mockResponse({ score });
-      mockedAxios.post.mockResolvedValueOnce(mockedResponse);
+      // Mock the same response for all axios requests
+      mockedAxios.post.mockResolvedValue(mockedResponse);
       const ethAdvocateProvider = new provider();
       const payload = await ethAdvocateProvider.verify({ address: mockAddress } as RequestPayload, mockContext);
 
@@ -74,6 +76,39 @@ describe("AccountAnalysis Providers", () => {
         // eslint-disable-next-line jest/no-conditional-expect
         expect(payload.record).toEqual({ address: mockAddress });
       }
+    });
+  });
+
+  describe("should fail the human_probability check if one of the simple models fails", () => {
+    it.each(scoreTestCases)("for score %i should return %s for %p", async (score, expected, provider) => {
+      const mockedResponse = mockResponse({ score });
+      let counter = 0;
+      mockedAxios.post.mockImplementation(() => {
+        counter += 1;
+        if(counter === 2) {
+          // We just fail the 2-nd request
+          return Promise.reject(new Error("Error with model!"));
+        }
+        return Promise.resolve(mockedResponse);
+      });
+      const providerInstance = new provider();
+      await expect(providerInstance.verify({ address: mockAddress } as RequestPayload, mockContext)).rejects.toThrow(new Error("Error with model!"));
+    });
+  });
+
+  describe("should fail the human_probability check if the call to aggregate model fails", () => {
+    it.each(scoreTestCases)("for score %i should return %s for %p", async (score, expected, provider) => {
+      const mockedResponse = mockResponse({ score });
+      mockedAxios.post.mockImplementation((url) => {
+        const model = url.split("/").pop();
+        if (model === "aggregate-model-predict") { 
+          // We just fail the request to aggregate-model-predict
+          return Promise.reject(new Error("Error with model!"));
+        }
+        return Promise.resolve(mockedResponse);
+      });
+      const providerInstance = new provider();
+      await expect(providerInstance.verify({ address: mockAddress } as RequestPayload, mockContext)).rejects.toThrow(new Error("Error with model!"));
     });
   });
 

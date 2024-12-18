@@ -20,7 +20,7 @@ import {
 
 import { MultiAttestationRequest, ZERO_BYTES32, NO_EXPIRATION } from "@ethereum-attestation-service/eas-sdk";
 
-import { utils } from "ethers";
+import { parseEther } from "ethers";
 import * as easFeesMock from "../src/utils/easFees";
 import * as identityMock from "@gitcoin/passport-identity";
 import * as easSchemaMock from "../src/utils/easStampSchema";
@@ -28,8 +28,17 @@ import * as easPassportSchemaMock from "../src/utils/easPassportSchema";
 import { IAMError } from "../src/utils/scorerService";
 import { VerifyDidChallengeBaseError, verifyDidChallenge } from "../src/utils/verifyDidChallenge";
 import { getEip712Issuer } from "../src/issuers";
+import { toJsonObject } from "../src/utils/json";
 
 const issuer = getEip712Issuer();
+
+jest.mock("../src/utils/bans", () => ({
+  checkCredentialBans: jest.fn().mockImplementation((input) => Promise.resolve(input)),
+}));
+
+jest.mock("../src/utils/revocations", () => ({
+  filterRevokedCredentials: jest.fn().mockImplementation((input) => Promise.resolve(input)),
+}));
 
 jest.mock("../src/utils/verifyDidChallenge", () => ({
   verifyDidChallenge: jest.fn().mockImplementation(() => "0x0"),
@@ -47,23 +56,15 @@ jest.mock("../src/index", () => {
 
 jest.mock("ethers", () => {
   const originalModule = jest.requireActual("ethers");
-  const ethers = originalModule.ethers;
-  const utils = originalModule.utils;
 
   return {
-    utils: {
-      ...utils,
-      getAddress: jest.fn().mockImplementation(() => {
-        return "0x0";
-      }),
-      verifyMessage: jest.fn().mockImplementation(() => {
-        return "string";
-      }),
-      splitSignature: jest.fn().mockImplementation(() => {
-        return { v: 0, r: "r", s: "s" };
-      }),
-    },
-    ethers,
+    ...originalModule,
+    getAddress: jest.fn().mockImplementation(() => {
+      return "0x0";
+    }),
+    verifyMessage: jest.fn().mockImplementation(() => {
+      return "string";
+    }),
   };
 });
 
@@ -424,7 +425,7 @@ describe("POST /verify", function () {
     // Delete EIP712Domain so that ethers does not complain about the ambiguous primary type
     delete standardizedTypes.EIP712Domain;
 
-    const signerAddress = originalEthers.utils.verifyTypedData(
+    const signerAddress = originalEthers.verifyTypedData(
       domain,
       standardizedTypes,
       signedCredential,
@@ -434,7 +435,7 @@ describe("POST /verify", function () {
     const signerIssuedCredential = signerAddress.toLowerCase() === signedCredential.issuer.split(":").pop();
 
     if (signerIssuedCredential) {
-      const splitSignature = originalEthers.utils.splitSignature(signedCredential.proof.proofValue);
+      const splitSignature = originalEthers.Signature.from(signedCredential.proof.proofValue);
       return splitSignature;
     }
   });
@@ -653,6 +654,7 @@ describe("POST /verify", function () {
         challenge: "123456789ABDEFGHIJKLMNOPQRSTUVWXYZ",
       },
     };
+
     // payload containing a signature of the challenge in the challenge credential
     const payload = {
       type: "Simple",
@@ -672,7 +674,7 @@ describe("POST /verify", function () {
       .expect(401)
       .expect("Content-Type", /json/);
 
-    expect((response.body as ErrorResponseBody).error).toEqual("Unable to verify payload");
+    expect((response.body as ErrorResponseBody).error).toEqual("Invalid challenge 'signer' and 'provider'");
   });
 
   it("handles invalid challenge requests where 'valid' proof is passed as false (test against Simple Provider)", async () => {
@@ -1048,7 +1050,7 @@ const mockMultiAttestationRequestWithPassportAndScore: MultiAttestationRequest[]
         expirationTime: NO_EXPIRATION,
         revocable: false,
         refUID: ZERO_BYTES32,
-        value: "25000000000000000",
+        value: BigInt("25000000000000000"),
       },
     ],
   },
@@ -1064,7 +1066,7 @@ const mockMultiAttestationRequestWithPassportAndScore: MultiAttestationRequest[]
         expirationTime: NO_EXPIRATION,
         revocable: true,
         refUID: ZERO_BYTES32,
-        value: "25000000000000000",
+        value: BigInt("25000000000000000"),
       },
     ],
   },
@@ -1077,7 +1079,7 @@ describe("POST /eas", () => {
   beforeEach(() => {
     getEASFeeAmountSpy = jest
       .spyOn(easFeesMock, "getEASFeeAmount")
-      .mockReturnValue(Promise.resolve(utils.parseEther("0.025")));
+      .mockReturnValue(Promise.resolve(parseEther("0.025")));
   });
 
   afterEach(() => {
@@ -1250,7 +1252,7 @@ describe("POST /eas", () => {
 
     const expectedPayload = {
       passport: {
-        multiAttestationRequest: mockMultiAttestationRequestWithPassportAndScore,
+        multiAttestationRequest: toJsonObject(mockMultiAttestationRequestWithPassportAndScore),
         fee: "25000000000000000",
         nonce,
       },
@@ -1435,7 +1437,9 @@ describe("POST /eas/passport", () => {
       .expect(200)
       .expect("Content-Type", /json/);
 
-    expect(response.body.passport.multiAttestationRequest).toEqual(mockMultiAttestationRequestWithPassportAndScore);
+    expect(response.body.passport.multiAttestationRequest).toEqual(
+      toJsonObject(mockMultiAttestationRequestWithPassportAndScore)
+    );
     expect(response.body.passport.nonce).toEqual(nonce);
     expect(identityMock.verifyCredential).toHaveBeenCalledTimes(credentials.length);
     expect(formatMultiAttestationRequestSpy).toHaveBeenCalled();

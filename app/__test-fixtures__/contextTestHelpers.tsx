@@ -1,4 +1,5 @@
 import { ScorerContext, ScorerContextState } from "../context/scorerContext";
+import { vi } from "vitest";
 import { CeramicContext, CeramicContextState, IsLoadingPassportState } from "../context/ceramicContext";
 import { platforms, ProviderSpec } from "@gitcoin/passport-platforms";
 import React from "react";
@@ -12,6 +13,8 @@ import {
   DbAuthTokenStatus,
 } from "../context/datastoreConnectionContext";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { WagmiProvider } from "wagmi";
+import { wagmiConfig } from "../utils/web3";
 
 export const getProviderSpec = (platform: PLATFORM_ID, provider: string): ProviderSpec => {
   const platformDefinition = platforms[platform];
@@ -95,15 +98,15 @@ export const makeTestCeramicContext = (initialState?: Partial<CeramicContextStat
       },
     },
     passportLoadResponse: undefined,
-    handleAddStamps: jest.fn(),
-    handlePatchStamps: jest.fn(),
-    handleCreatePassport: jest.fn(),
-    handleDeleteStamps: jest.fn(),
-    handleComposeRetry: jest.fn(),
+    handleAddStamps: vi.fn(),
+    handlePatchStamps: vi.fn(),
+    handleCreatePassport: vi.fn(),
+    handleDeleteStamps: vi.fn(),
+    handleComposeRetry: vi.fn(),
     expiredProviders: [],
     expiredPlatforms: {},
     passportHasCacaoError: false,
-    cancelCeramicConnection: jest.fn(),
+    cancelCeramicConnection: vi.fn(),
     verifiedProviderIds: [],
     verifiedPlatforms: {},
     platformExpirationDates: {},
@@ -132,7 +135,7 @@ export const makeTestClaimingContext = (
   initialState?: Partial<StampClaimingContextState>
 ): StampClaimingContextState => {
   return {
-    claimCredentials: jest.fn(),
+    claimCredentials: vi.fn(),
     status: StampClaimProgressStatus.Idle,
     ...initialState,
   };
@@ -148,6 +151,7 @@ export const scorerContext = {
       connectMessage: "Verify amount",
       isEVM: true,
       possiblePoints: 7.4399999999999995,
+      displayPossiblePoints: 7.4399999999999995,
       earnedPoints: 0,
     },
     {
@@ -158,6 +162,7 @@ export const scorerContext = {
       connectMessage: "Connect Account",
       isEVM: true,
       possiblePoints: 12.93,
+      displayPossiblePoints: 12.93,
       earnedPoints: 0,
     },
     {
@@ -167,6 +172,7 @@ export const scorerContext = {
       description: "Connect your existing Twitter account to verify.",
       connectMessage: "Connect Account",
       possiblePoints: 3.63,
+      displayPossiblePoints: 3.63,
       earnedPoints: 3.63,
     },
     {
@@ -176,6 +182,7 @@ export const scorerContext = {
       description: "Connect your existing Discord account to verify.",
       connectMessage: "Connect Account",
       possiblePoints: 0.689,
+      displayPossiblePoints: 0.689,
       earnedPoints: 0,
     },
     {
@@ -185,6 +192,7 @@ export const scorerContext = {
       description: "Connect your existing Google Account to verify",
       connectMessage: "Connect Account",
       possiblePoints: 2.25,
+      displayPossiblePoints: 2.25,
       earnedPoints: 1,
     },
   ],
@@ -192,7 +200,7 @@ export const scorerContext = {
 } as unknown as ScorerContextState;
 
 export const createWalletStoreMock = () => {
-  const mockConnect = jest.fn();
+  const mockConnect = vi.fn();
 
   const mockWalletState = {
     address: "0x123",
@@ -210,12 +218,12 @@ export const createWalletStoreMock = () => {
 };
 
 const datastoreConnectionContext = {
-  connect: jest.fn(),
-  disconnect: jest.fn(),
+  connect: vi.fn(),
+  disconnect: vi.fn(),
   dbAccessToken: "token",
   dbAccessTokenStatus: "connected" as DbAuthTokenStatus,
-  did: jest.fn() as any,
-  checkSessionIsValid: jest.fn().mockImplementation(() => true),
+  did: vi.fn() as any,
+  checkSessionIsValid: vi.fn().mockImplementation(() => true),
 };
 
 export const renderWithContext = (
@@ -227,11 +235,13 @@ export const renderWithContext = (
   const queryClient = new QueryClient();
   return render(
     <QueryClientProvider client={queryClient}>
-      <DatastoreConnectionContext.Provider value={{ ...datastoreConnectionContext, ...datastoreContextOverride }}>
-        <ScorerContext.Provider value={{ ...scorerContext, ...scorerContextOverride }}>
-          <CeramicContext.Provider value={ceramicContext}>{ui}</CeramicContext.Provider>
-        </ScorerContext.Provider>
-      </DatastoreConnectionContext.Provider>
+      <WagmiProvider config={wagmiConfig}>
+        <DatastoreConnectionContext.Provider value={{ ...datastoreConnectionContext, ...datastoreContextOverride }}>
+          <ScorerContext.Provider value={{ ...scorerContext, ...scorerContextOverride }}>
+            <CeramicContext.Provider value={ceramicContext}>{ui}</CeramicContext.Provider>
+          </ScorerContext.Provider>
+        </DatastoreConnectionContext.Provider>
+      </WagmiProvider>
     </QueryClientProvider>
   );
 };

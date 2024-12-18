@@ -25,7 +25,7 @@ import * as Binance from "./Binance";
 import * as CustomGithub from "./CustomGithub";
 import { PlatformSpec, PlatformGroupSpec, Provider } from "./types";
 
-type PlatformConfig = {
+export type PlatformConfig = {
   PlatformDetails: PlatformSpec;
   ProviderConfig: PlatformGroupSpec[];
   providers: Provider[];
@@ -57,7 +57,7 @@ const platforms: Record<string, PlatformConfig> = {
   Outdid,
   AllowList,
   Binance,
-  CustomGithub
+  CustomGithub,
 };
 
 if (process.env.NEXT_PUBLIC_FF_NEW_POAP_STAMPS === "on") {

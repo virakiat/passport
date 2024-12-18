@@ -1,3 +1,4 @@
+import { vi, describe, it, expect } from "vitest";
 import React from "react";
 import { screen, render } from "@testing-library/react";
 
@@ -13,22 +14,30 @@ import { PlatformCard } from "../../components/PlatformCard";
 import { PlatformScoreSpec, ScorerContextState } from "../../context/scorerContext";
 import { DEFAULT_CUSTOMIZATION, useCustomization } from "../../hooks/useCustomization";
 import { platforms } from "@gitcoin/passport-platforms";
+import { PLATFORM_ID } from "@gitcoin/passport-types";
+import { usePlatforms } from "../../hooks/usePlatforms";
 
-jest.mock("@didtools/cacao", () => ({
+vi.mock("@didtools/cacao", () => ({
   Cacao: {
-    fromBlockBytes: jest.fn(),
+    fromBlockBytes: vi.fn(),
   },
 }));
 
-jest.mock("next/router", () => ({
+vi.mock("next/router", () => ({
   useRouter: () => ({
     query: { filter: "" },
   }),
 }));
 
-jest.mock("../../hooks/useCustomization", () => ({
-  useCustomization: jest.fn(),
-}));
+vi.mock("../../hooks/useCustomization");
+
+vi.mock("../../hooks/usePlatforms", async (importActual) => {
+  const actual = (await importActual()) as any;
+  return {
+    ...actual,
+    usePlatforms: vi.fn().mockImplementation(actual.usePlatforms),
+  };
+});
 
 const mockCeramicContext: CeramicContextState = makeTestCeramicContext();
 
@@ -46,6 +55,7 @@ let categoryProps: CategoryProps = {
         name: "Github",
         platform: "Github",
         possiblePoints: 7.0600000000000005,
+        displayPossiblePoints: 7.0600000000000005,
         website: "https://github.com",
       },
       {
@@ -56,6 +66,7 @@ let categoryProps: CategoryProps = {
         name: "Google",
         platform: "Google",
         possiblePoints: 0.525,
+        displayPossiblePoints: 0.525,
         website: "https://www.google.com/",
       },
       {
@@ -66,6 +77,7 @@ let categoryProps: CategoryProps = {
         name: "Discord",
         platform: "Discord",
         possiblePoints: 0.516,
+        displayPossiblePoints: 0.516,
         website: "https://discord.com/",
       },
     ],
@@ -75,7 +87,7 @@ let categoryProps: CategoryProps = {
 describe("<CardList />", () => {
   beforeEach(() => {
     cardListProps = {};
-    (useCustomization as jest.Mock).mockReturnValue({ ...DEFAULT_CUSTOMIZATION });
+    vi.mocked(useCustomization).mockReturnValue({ ...DEFAULT_CUSTOMIZATION });
   });
 
   it("renders provider cards when loading state is not defined", () => {
@@ -126,8 +138,8 @@ describe("<CardList />", () => {
   it("should indicate on card whether or not it has been expired", () => {
     const mockCeramicContextWithExpiredStamps: CeramicContextState = makeTestCeramicContextWithExpiredStamps();
 
-    const mockSetCurrentPlatform = jest.fn();
-    const mockOnOpen = jest.fn();
+    const mockSetCurrentPlatform = vi.fn();
+    const mockOnOpen = vi.fn();
     render(
       <CeramicContext.Provider value={mockCeramicContextWithExpiredStamps}>
         <PlatformCard
@@ -138,6 +150,7 @@ describe("<CardList />", () => {
             description: "ETH",
             connectMessage: "ETH",
             possiblePoints: 10,
+            displayPossiblePoints: 10,
             earnedPoints: 7,
           }}
           onOpen={mockOnOpen}
@@ -178,6 +191,7 @@ describe("<CardList />", () => {
           connectMessage: "Verify",
           isEVM: true,
           possiblePoints: 100,
+          displayPossiblePoints: 100,
           earnedPoints: 100,
         },
       ] as PlatformScoreSpec[],
@@ -204,8 +218,152 @@ test("renders Category component", () => {
 });
 
 describe("show/hide tests", () => {
+  beforeEach(async () => {
+    const actualUsePlatforms = await vi.importActual("../../hooks/usePlatforms");
+    vi.mocked(usePlatforms).mockImplementation((actualUsePlatforms as any).usePlatforms);
+  });
+
+  it("should hide platform when all providers are deprecated and no points earned", () => {
+    vi.mocked(useCustomization).mockReturnValue({} as any);
+
+    // Mock a platform with all deprecated providers
+    const mockPlatforms = new Map();
+    mockPlatforms.set("TestPlatform", {
+      platFormGroupSpec: [
+        {
+          providers: [{ isDeprecated: true }, { isDeprecated: true }],
+        },
+      ],
+    });
+
+    vi.mocked(usePlatforms).mockReturnValue({
+      platformProviderIds: {},
+      platforms: mockPlatforms,
+      platformCatagories: [],
+    } as any);
+
+    const scorerContext: Partial<ScorerContextState> = {
+      scoredPlatforms: [
+        {
+          possiblePoints: 10,
+          displayPossiblePoints: 10,
+          earnedPoints: 0,
+          platform: "TestPlatform" as PLATFORM_ID,
+          name: "Test Platform",
+          description: "Test Description",
+          connectMessage: "Connect",
+        },
+      ],
+    };
+
+    renderWithContext(mockCeramicContext, <CardList {...cardListProps} />, {}, scorerContext);
+
+    // Platform should be hidden
+    expect(screen.queryByText("Test Platform")).not.toBeInTheDocument();
+  });
+
+  it("should show platform when all providers are deprecated but points were earned", () => {
+    vi.mocked(useCustomization).mockReturnValue({} as any);
+
+    // Mock a platform with all deprecated providers
+    const mockPlatforms = new Map();
+    mockPlatforms.set("TestPlatform", {
+      platFormGroupSpec: [
+        {
+          providers: [{ isDeprecated: true }, { isDeprecated: true }],
+        },
+      ],
+    });
+
+    vi.mocked(usePlatforms).mockReturnValue({
+      platformProviderIds: {},
+      platforms: mockPlatforms,
+      platformCatagories: [
+        {
+          name: "Test Category",
+          description: "Test Description",
+          platforms: ["TestPlatform"],
+        },
+      ],
+    } as any);
+
+    const scorerContext: Partial<ScorerContextState> = {
+      scoredPlatforms: [
+        {
+          possiblePoints: 10,
+          displayPossiblePoints: 10,
+          earnedPoints: 5,
+          platform: "TestPlatform" as PLATFORM_ID,
+          name: "Test Platform",
+          description: "Test Description",
+          connectMessage: "Connect",
+        },
+      ],
+    };
+
+    renderWithContext(mockCeramicContext, <CardList {...cardListProps} />, {}, scorerContext);
+
+    // Platform should be visible because points were earned
+    expect(screen.getByText("Test Platform")).toBeInTheDocument();
+  });
+
+  it("should show platform when some providers are not deprecated", () => {
+    vi.mocked(useCustomization).mockReturnValue({} as any);
+
+    // Mock a platform with mixed deprecated and active providers
+    const mockPlatforms = new Map();
+    mockPlatforms.set("NFT", {
+      platFormGroupSpec: [
+        {
+          providers: [
+            {
+              name: "NFTScore#50",
+              isDeprecated: true,
+            },
+            {
+              name: "NFTScore#75",
+              isDeprecated: false,
+            },
+          ],
+        },
+      ],
+    });
+
+    // Mock the usePlatforms hook
+    vi.mocked(usePlatforms).mockReturnValue({
+      platformProviderIds: { NFT: ["NFTScore#50", "NFTScore#75"] },
+      platforms: mockPlatforms,
+      platformCatagories: [
+        {
+          name: "Bla",
+          description: "Test Description",
+          platforms: ["NFT"],
+        },
+      ],
+      platformSpecs: { NFT: { platform: "NFT", name: "NFT", description: "NFT", connectMessage: "NFT" } },
+    } as any);
+
+    const scorerContext: Partial<ScorerContextState> = {
+      scoredPlatforms: [
+        {
+          possiblePoints: 10,
+          displayPossiblePoints: 10,
+          earnedPoints: 0,
+          platform: "NFT" as PLATFORM_ID,
+          name: "NFT",
+          description: "NFT",
+          connectMessage: "Connect",
+        },
+      ],
+    };
+
+    renderWithContext(mockCeramicContext, <CardList {...cardListProps} />, {}, scorerContext);
+
+    // Platform should be visible because not all providers are deprecated
+    expect(screen.getByTestId("platform-name")).toHaveTextContent("NFT");
+  });
   it("should show allow list stamp if user has points", () => {
-    (useCustomization as jest.Mock).mockReturnValue({
+    vi.mocked(useCustomization).mockReturnValue({
       partnerName: "TestPartner",
       scorer: {
         weights: {
@@ -229,6 +387,7 @@ describe("show/hide tests", () => {
       scoredPlatforms: [
         {
           possiblePoints: 10,
+          displayPossiblePoints: 10,
           earnedPoints: 10,
           platform: "AllowList",
           name: "Allow List Platform",
@@ -247,7 +406,7 @@ describe("show/hide tests", () => {
   });
 
   it("should hide allow list stamp if user has no points", () => {
-    (useCustomization as jest.Mock).mockReturnValue({
+    vi.mocked(useCustomization).mockReturnValue({
       partnerName: "TestPartner",
       scorer: {
         weights: {
@@ -271,6 +430,7 @@ describe("show/hide tests", () => {
       scoredPlatforms: [
         {
           possiblePoints: 10,
+          displayPossiblePoints: 10,
           earnedPoints: 0,
           platform: "AllowList",
           name: "Allow List Platform",
@@ -289,7 +449,7 @@ describe("show/hide tests", () => {
   });
 
   it("include platform if any stamps included", () => {
-    (useCustomization as jest.Mock).mockReturnValue({
+    vi.mocked(useCustomization).mockReturnValue({
       scorer: {
         weights: {
           SelfStakingBronze: "1",
@@ -306,6 +466,7 @@ describe("show/hide tests", () => {
       scoredPlatforms: [
         {
           possiblePoints: 10,
+          displayPossiblePoints: 10,
           earnedPoints: 2,
           ...platforms["GtcStaking"].PlatformDetails,
         },
@@ -322,7 +483,7 @@ describe("show/hide tests", () => {
   });
 
   it("exclude platform if no stamps included", () => {
-    (useCustomization as jest.Mock).mockReturnValue({
+    vi.mocked(useCustomization).mockReturnValue({
       scorer: {
         weights: {
           ADifferentStamp: "1",
@@ -334,6 +495,7 @@ describe("show/hide tests", () => {
       scoredPlatforms: [
         {
           possiblePoints: 10,
+          displayPossiblePoints: 10,
           earnedPoints: 2,
           ...platforms["GtcStaking"].PlatformDetails,
         },
@@ -350,12 +512,13 @@ describe("show/hide tests", () => {
   });
 
   it("include platform if customization doesn't specify custom weights", () => {
-    (useCustomization as jest.Mock).mockReturnValue({});
+    vi.mocked(useCustomization).mockReturnValue({} as any);
 
     const scorerContext: Partial<ScorerContextState> = {
       scoredPlatforms: [
         {
           possiblePoints: 10,
+          displayPossiblePoints: 10,
           earnedPoints: 2,
           ...platforms["GtcStaking"].PlatformDetails,
         },
@@ -372,12 +535,13 @@ describe("show/hide tests", () => {
   });
 
   it("hide platform if there are no possible points", () => {
-    (useCustomization as jest.Mock).mockReturnValue({});
+    vi.mocked(useCustomization).mockReturnValue({} as any);
 
     const scorerContext: Partial<ScorerContextState> = {
       scoredPlatforms: [
         {
           possiblePoints: 0,
+          displayPossiblePoints: 10,
           earnedPoints: 0,
           ...platforms["GtcStaking"].PlatformDetails,
         },

@@ -18,7 +18,6 @@ export type CoinbaseFindMyUserResponse = {
   };
   status?: number;
 };
-
 export class CoinbaseProvider implements Provider {
   // Give the provider a type so that we can select it with a payload
   type = "CoinbaseDualVerification";
@@ -44,6 +43,10 @@ export class CoinbaseProvider implements Provider {
       record: { id: coinbaseAccountId },
     };
   }
+}
+
+export class CoinbaseProvider2 extends CoinbaseProvider {
+  type = "CoinbaseDualVerification2";
 }
 
 export const requestAccessToken = async (code: string): Promise<string | undefined> => {
@@ -72,7 +75,6 @@ export const requestAccessToken = async (code: string): Promise<string | undefin
     console.log("error", e);
     handleProviderAxiosError(e, "Coinbase access token", [clientSecret, code]);
   }
-  console.log("tokenRequest", tokenRequest);
 
   return tokenRequest?.data?.access_token;
 };
@@ -84,7 +86,7 @@ export const verifyCoinbaseLogin = async (code: string): Promise<string | undefi
   try {
     // Now that we have an access token fetch the user details
     userResponse = await axios.get("https://api.coinbase.com/v2/user", {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
     });
   } catch (e) {
     handleProviderAxiosError(e, "Coinbase user info", [accessToken, code]);

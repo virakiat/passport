@@ -2,7 +2,6 @@ import { useNavigateToLastStep, useNavigateToRootStep, useNextCampaignStep } fro
 import { useDatastoreConnectionContext } from "../../context/datastoreConnectionContext";
 import { useCallback, useContext, useEffect, useState } from "react";
 import { CeramicContext } from "../../context/ceramicContext";
-import { useWalletStore } from "../../context/walletStore";
 import { useMessage } from "../../hooks/useMessage";
 import { useScrollBadge } from "../../hooks/useScrollBadge";
 import { CUSTOM_PLATFORM_TYPE_INFO } from "../../config/platformMap";
@@ -17,6 +16,7 @@ import { LoadButton } from "../LoadButton";
 import { GitHubIcon } from "../WelcomeFooter";
 import { ScrollCampaignPage } from "./ScrollCampaignPage";
 import { BadgeCTA } from "../ScrollCampaign";
+import { useAccount } from "wagmi";
 
 export const ScrollConnectGithub = () => {
   const goToNextStep = useNextCampaignStep();
@@ -24,7 +24,7 @@ export const ScrollConnectGithub = () => {
   const { did, checkSessionIsValid } = useDatastoreConnectionContext();
   const { userDid, database } = useContext(CeramicContext);
   const goToLoginStep = useNavigateToRootStep();
-  const address = useWalletStore((state) => state.address);
+  const { address } = useAccount();
   const [noCredentialReceived, setNoCredentialReceived] = useState(false);
   const [msg, setMsg] = useState<string | undefined>("Verifying existing badges on chain ... ");
   const [isVerificationRunning, setIsVerificationRunning] = useState(false);
@@ -131,7 +131,15 @@ export const ScrollConnectGithub = () => {
         <>
           <BadgeCTA
             header="Connect to Github"
-            body="Passport is privacy preserving and verifies you have 1 or more commits to the following Repos located here. Click below and obtain the specific developer credentials"
+            body="Connect your GitHub account to prove your contributions to 
+            <a class='underline text-[#93FBED]' 
+              href='https://support.passport.xyz/passport-knowledge-base/partner-campaigns/scroll-developer-badges'
+              target='_blank'
+              rel='noopener noreferrer'
+            >
+            key projects</a>.
+            No personal info or account info is stored — we simply review contributions to determine whether you qualify for the badge. 
+            This helps us confirm if you're a zkTalent for the Scroll ecosystem."
           />
           <div className="mt-8 flex items-center justify-start w-full lg:w-auto">
             <LoadButton
